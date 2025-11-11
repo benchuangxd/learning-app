@@ -82,14 +82,48 @@ export function parseQuestions(input: string): ParseResult {
     let questionText = '';
     let explanation = '';
     let choiceCounter = 0;
+    let isReadingExplanation = false;
+    let isInCodeBlock = false;
+    let codeBlockLines: string[] = [];
 
     for (let i = 0; i < lines.length; i++) {
-      const line = lines[i]?.trim();
+      const rawLine = lines[i];
+      if (rawLine === undefined) continue;
+      
+      const line = rawLine.trim();
 
-      if (!line) continue;
+      if (!line && !isInCodeBlock) continue;
+      
+      // Handle code block delimiters
+      if (line.startsWith('```')) {
+        if (isInCodeBlock) {
+          // End of code block
+          isInCodeBlock = false;
+          // Add code block to question text
+          if (questionText) {
+            questionText += '\n\n```\n' + codeBlockLines.join('\n') + '\n```';
+          }
+          codeBlockLines = [];
+        } else {
+          // Start of code block
+          isInCodeBlock = true;
+        }
+        continue;
+      }
+      
+      // If we're inside a code block, collect the lines
+      if (isInCodeBlock) {
+        codeBlockLines.push(rawLine); // Keep original line with indentation
+        continue;
+      }
+      
+      // Skip image references (e.g., ![image](path))
+      if (line.startsWith('![')) {
+        continue;
+      }
 
-      // Match question header: **Question 1 (1 point)**
-      const headerMatch = line.match(/\*\*Question\s+\d+\s*\((\d+)\s*point[s]?\)\*\*/i);
+      // Match question header: **Question 1 (1 point)** or **Question 1 (1 point, multiple choice)** or **Question 1 (1 point) 666**
+      const headerMatch = line.match(/\*\*Question\s+\d+\s*\((\d+)\s*point[s]?(?:,\s*[^)]+)?\)\*\*(?:\s+\d+)?/i);
       if (headerMatch) {
         const points = parseInt(headerMatch[1] ?? '1', 10);
         currentQuestion = { points, difficulty: QuestionDifficulty.MEDIUM };
@@ -101,19 +135,78 @@ export function parseQuestions(input: string): ParseResult {
         continue;
       }
 
-      // Match explanation: — Explanation text (em dash)
+      // Match explanation: — Explanation text (em dash) OR **Explanation:**
       if (line.startsWith('—')) {
         explanation = line.replace(/^—\s*/, '');
+        isReadingExplanation = true;
+        continue;
+      }
+      
+      // Match **Explanation:** header
+      if (line.match(/^\*\*Explanation:?\*\*\s*$/i)) {
+        isReadingExplanation = true;
+        // Explanation content comes on next lines
+        let j = i + 1;
+        const explanationLines: string[] = [];
+        while (j < lines.length && lines[j]?.trim()) {
+          explanationLines.push(lines[j]?.trim() ?? '');
+          j++;
+        }
+        explanation = explanationLines.join(' ');
+        i = j - 1; // Skip the lines we processed
+        continue;
+      }
+      
+      // If we're reading explanation, continue adding text
+      if (isReadingExplanation && !line.startsWith('**') && !line.match(/^-{3,}/)) {
+        // Continue adding to explanation
+        if (explanation) {
+          explanation += ' ' + line;
+        } else {
+          explanation = line;
+        }
         continue;
       }
 
-      // Match A-D choice: A. Text or A. Text ✅
-      const adChoiceMatch = line.match(/^([A-F])\.\s*(.+?)(\s*✅)?$/);
-      if (adChoiceMatch && currentQuestion) {
+      // Match A-J choice or #N choice (for sorting questions): A. Text or #1 Text
+      // But NOT if we're already reading the explanation
+      const adChoiceMatch = line.match(/^([A-J])\.\s*(.+?)(\s*✅.*)?$/);
+      const sortChoiceMatch = line.match(/^#(\d+)\s+(.+?)(\s*✅.*)?$/);
+      
+      if (adChoiceMatch && currentQuestion && !isReadingExplanation) {
         const label = adChoiceMatch[1] ?? '';
-        const text = adChoiceMatch[2]?.trim() ?? '';
-        const isCorrect = Boolean(adChoiceMatch[3]);
+        let text = adChoiceMatch[2]?.trim() ?? '';
+        const checkmarkPart = adChoiceMatch[3] ?? '';
+        const isCorrect = checkmarkPart.includes('✅');
+        
+        // If there's text after ✅ in parentheses, include it in the choice text
+        if (checkmarkPart && checkmarkPart.includes('(')) {
+          text += ' ' + checkmarkPart.replace('✅', '').trim();
+        }
 
+        currentChoices.push({
+          id: crypto.randomUUID(),
+          label,
+          text,
+          isCorrect,
+        });
+        continue;
+      }
+      
+      // Handle sorting questions with #N format (e.g., #1 Desk-checking, #2 Hardware Breakpoints)
+      if (sortChoiceMatch && currentQuestion && !isReadingExplanation) {
+        const sortNumber = sortChoiceMatch[1] ?? '';
+        let text = sortChoiceMatch[2]?.trim() ?? '';
+        const checkmarkPart = sortChoiceMatch[3] ?? '';
+        const isCorrect = checkmarkPart.includes('✅');
+        
+        if (checkmarkPart && checkmarkPart.includes('(')) {
+          text += ' ' + checkmarkPart.replace('✅', '').trim();
+        }
+        
+        // Convert #1, #2, #3, #4 to A, B, C, D
+        const label = String.fromCharCode(64 + parseInt(sortNumber));
+        
         currentChoices.push({
           id: crypto.randomUUID(),
           label,
@@ -124,8 +217,9 @@ export function parseQuestions(input: string): ParseResult {
       }
 
       // Match bullet choice: - Text or - Text ✅ (for bullet list format)
+      // But NOT if we're already reading the explanation
       const bulletChoiceMatch = line.match(/^-\s+(.+?)(\s*✅)?$/);
-      if (bulletChoiceMatch && currentQuestion && questionText) {
+      if (bulletChoiceMatch && currentQuestion && questionText && !isReadingExplanation) {
         choiceCounter++;
         const label = String.fromCharCode(64 + choiceCounter); // A, B, C, D...
         const text = bulletChoiceMatch[1]?.trim() ?? '';
@@ -140,8 +234,24 @@ export function parseQuestions(input: string): ParseResult {
         continue;
       }
 
+      // Check if this line is an answer to a fill-in-the-blank with ___ (e.g., "✅ **A = 75 ms**")
+      if (currentQuestion && questionText.includes('___') && currentChoices.length === 0 && line.match(/^\s*✅\s*\*\*(.+?)\*\*/)) {
+        // This is the answer line for a fill-in-the-blank question
+        const answerMatch = line.match(/✅\s*\*\*(.+?)\*\*/);
+        if (answerMatch) {
+          const answerText = answerMatch[1]?.trim() ?? '';
+          currentChoices.push({
+            id: crypto.randomUUID(),
+            label: 'A',
+            text: answerText,
+            isCorrect: true,
+          });
+        }
+        continue;
+      }
+
       // If we have a current question and no choices yet, it's the question text
-      if (currentQuestion && currentChoices.length === 0 && !line.startsWith('—')) {
+      if (currentQuestion && currentChoices.length === 0 && !line.startsWith('—') && !line.startsWith('✅')) {
         if (questionText) {
           questionText += ' ' + line;
         } else {
@@ -151,28 +261,103 @@ export function parseQuestions(input: string): ParseResult {
     }
 
     // Finish the question for this block
-    if (currentQuestion && questionText && currentChoices.length > 0) {
-      const correctAnswers = currentChoices.filter((c) => c.isCorrect);
-
-      if (correctAnswers.length === 0) {
-        errors.push({
-          line: 0,
-          message: `Question "${questionText.substring(0, 50)}..." must have at least one correct answer (marked with ✅)`,
-        });
+    if (currentQuestion && questionText) {
+      // Handle questions with bold words but no ✅ (e.g., "A **30,000,000** count is used...")
+      if (currentChoices.length === 0 && !questionText.includes('✅') && questionText.match(/\*\*([^*]+)\*\*/g)) {
+        const boldMatches = questionText.match(/\*\*([^*]+)\*\*/g);
+        if (boldMatches) {
+          const answers = boldMatches.map(match => match.replace(/\*\*/g, ''));
+          
+          // Replace bold words with blanks
+          let questionWithBlanks = questionText;
+          boldMatches.forEach(() => {
+            questionWithBlanks = questionWithBlanks.replace(/\*\*([^*]+)\*\*/, '___');
+          });
+          
+          currentChoices.push({
+            id: crypto.randomUUID(),
+            label: 'A',
+            text: answers.join(', '),
+            isCorrect: true,
+          });
+          
+          questionText = questionWithBlanks;
+        }
       }
+      
+      // Handle statement-style questions with ✅ at the end
+      if (currentChoices.length === 0 && questionText.includes('✅')) {
+        // Remove the checkmark from question text
+        const cleanedText = questionText.replace(/\s*✅\s*$/, '').trim();
+        
+        // Check if this is a fill-in-the-blank question (has **bold** words)
+        const boldMatches = cleanedText.match(/\*\*([^*]+)\*\*/g);
+        
+        if (boldMatches && boldMatches.length > 0) {
+          // Fill-in-the-blank question
+          // Extract the bold words (answers)
+          const answers = boldMatches.map(match => match.replace(/\*\*/g, ''));
+          
+          // Replace bold words with blanks in question text
+          let questionWithBlanks = cleanedText;
+          boldMatches.forEach(() => {
+            questionWithBlanks = questionWithBlanks.replace(/\*\*([^*]+)\*\*/, '___');
+          });
+          
+          // Create a single choice with the correct answer(s)
+          currentChoices.push({
+            id: crypto.randomUUID(),
+            label: 'A',
+            text: answers.join(', '),
+            isCorrect: true,
+          });
+          
+          questionText = questionWithBlanks;
+        } else {
+          // True/False question (no bold words)
+          // Create True/False choices with True marked correct
+          currentChoices.push(
+            {
+              id: crypto.randomUUID(),
+              label: 'A',
+              text: 'True',
+              isCorrect: true,
+            },
+            {
+              id: crypto.randomUUID(),
+              label: 'B',
+              text: 'False',
+              isCorrect: false,
+            }
+          );
+          
+          questionText = cleanedText;
+        }
+      }
+      
+      if (currentChoices.length > 0) {
+        const correctAnswers = currentChoices.filter((c) => c.isCorrect);
 
-      const question: Question = {
-        id: crypto.randomUUID(),
-        text: questionText.trim(),
-        points: currentQuestion.points ?? 1,
-        difficulty: currentQuestion.difficulty ?? QuestionDifficulty.MEDIUM,
-        choices: currentChoices,
-        explanation: explanation.trim(),
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
+        if (correctAnswers.length === 0) {
+          errors.push({
+            line: 0,
+            message: `Question "${questionText.substring(0, 50)}..." must have at least one correct answer (marked with ✅)`,
+          });
+        }
 
-      questions.push(question);
+        const question: Question = {
+          id: crypto.randomUUID(),
+          text: questionText.trim(),
+          points: currentQuestion.points ?? 1,
+          difficulty: currentQuestion.difficulty ?? QuestionDifficulty.MEDIUM,
+          choices: currentChoices,
+          explanation: explanation.trim(),
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+
+        questions.push(question);
+      }
     }
   }
 
@@ -193,8 +378,8 @@ export function validateQuestion(question: Question): string[] {
     errors.push('Question must have at least 2 choices');
   }
 
-  if (question.choices.length > 6) {
-    errors.push('Question cannot have more than 6 choices');
+  if (question.choices.length > 10) {
+    errors.push('Question cannot have more than 10 choices');
   }
 
   const correctChoices = question.choices.filter((c) => c.isCorrect);

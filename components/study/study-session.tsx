@@ -106,13 +106,30 @@ export function StudySession({ questions }: StudySessionProps): React.ReactEleme
   };
 
   const handleSubmit = (): void => {
-    if (selectedChoices.size === 0) return;
+    // Check if this is a sorting question (no correct answers marked)
+    const isSortingQuestion = currentQuestion.text.toLowerCase().includes('sort') &&
+                              correctChoices.length === 0;
+    
+    // Check if this is a fill-in-the-blank question (has ___ and single correct choice)
+    const isFillInBlank = currentQuestion.text.includes('___') &&
+                          currentQuestion.choices.length === 1 &&
+                          correctChoices.length === 1;
+    
+    // For sorting/fill-in-blank questions, no selection needed - just mark as viewed
+    if (!isSortingQuestion && !isFillInBlank && selectedChoices.size === 0) return;
 
-    // Check if answer is correct
-    const correctIds = new Set(correctChoices.map((c) => c.id));
-    const isCorrect =
-      selectedChoices.size === correctIds.size &&
-      Array.from(selectedChoices).every((id) => correctIds.has(id));
+    let isCorrect: boolean;
+    
+    if (isSortingQuestion || isFillInBlank) {
+      // Sorting and fill-in-blank questions are informational - always mark as correct
+      isCorrect = true;
+    } else {
+      // Check if answer is correct for normal questions
+      const correctIds = new Set(correctChoices.map((c) => c.id));
+      isCorrect =
+        selectedChoices.size === correctIds.size &&
+        Array.from(selectedChoices).every((id) => correctIds.has(id));
+    }
 
     // Record result
     const result: QuestionResult = {
@@ -138,6 +155,20 @@ export function StudySession({ questions }: StudySessionProps): React.ReactEleme
   };
 
   const isAnswerCorrect = (): boolean => {
+    // Check if this is a sorting question
+    const isSortingQuestion = currentQuestion.text.toLowerCase().includes('sort') &&
+                              correctChoices.length === 0;
+    
+    // Check if this is a fill-in-the-blank question
+    const isFillInBlank = currentQuestion.text.includes('___') &&
+                          currentQuestion.choices.length === 1 &&
+                          correctChoices.length === 1;
+    
+    if (isSortingQuestion || isFillInBlank) {
+      // Sorting and fill-in-blank questions are always correct (informational)
+      return true;
+    }
+    
     const correctIds = new Set(correctChoices.map((c) => c.id));
     return (
       selectedChoices.size === correctIds.size &&
@@ -181,45 +212,60 @@ export function StudySession({ questions }: StudySessionProps): React.ReactEleme
               const isSelected = selectedChoices.has(choice.id);
               const showCorrectness = answered;
               const isCorrectChoice = choice.isCorrect;
+              const isFillInBlank = currentQuestion.text.includes('___') && currentQuestion.choices.length === 1;
 
               return (
                 <div
                   key={choice.id}
                   onClick={() => handleChoiceSelect(choice.id)}
-                  className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                    showCorrectness && isCorrectChoice
-                      ? 'border-green-500 bg-green-50 dark:bg-green-950'
-                      : showCorrectness && isSelected && !isCorrectChoice
-                        ? 'border-red-500 bg-red-50 dark:bg-red-950'
-                        : isSelected
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border hover:border-primary/50'
-                  } ${answered ? 'cursor-default' : 'cursor-pointer'}`}
+                  className={`p-4 rounded-lg border-2 transition-all ${
+                    isFillInBlank && !answered
+                      ? 'border-muted bg-muted/50 cursor-default'
+                      : showCorrectness && isCorrectChoice
+                        ? 'border-green-500 bg-green-50 dark:bg-green-950 cursor-default'
+                        : showCorrectness && isSelected && !isCorrectChoice
+                          ? 'border-red-500 bg-red-50 dark:bg-red-950 cursor-default'
+                          : isSelected
+                            ? 'border-primary bg-primary/5 cursor-pointer'
+                            : 'border-border hover:border-primary/50 cursor-pointer'
+                  } ${answered ? 'cursor-default' : ''}`}
                 >
                   <div className="flex items-start gap-3">
-                    <div className="shrink-0 mt-0.5">
-                      {isMultipleAnswer ? (
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => {}}
-                          className="h-4 w-4 rounded border-gray-300"
-                          disabled={answered}
-                        />
+                    {!isFillInBlank && (
+                      <div className="shrink-0 mt-0.5">
+                        {isMultipleAnswer ? (
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {}}
+                            className="h-4 w-4 rounded border-gray-300"
+                            disabled={answered}
+                          />
+                        ) : (
+                          <input
+                            type="radio"
+                            checked={isSelected}
+                            onChange={() => {}}
+                            className="h-4 w-4"
+                            disabled={answered}
+                          />
+                        )}
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      {!isFillInBlank && <span className="font-semibold">{choice.label}.</span>}
+                      {isFillInBlank && answered ? (
+                        <div>
+                          <span className="font-semibold text-green-600">Answer: </span>
+                          <span className="text-green-600">{choice.text}</span>
+                        </div>
+                      ) : isFillInBlank ? (
+                        <span className="text-muted-foreground italic">Click &ldquo;Show Answer&rdquo; below to reveal</span>
                       ) : (
-                        <input
-                          type="radio"
-                          checked={isSelected}
-                          onChange={() => {}}
-                          className="h-4 w-4"
-                          disabled={answered}
-                        />
+                        <span> {choice.text}</span>
                       )}
                     </div>
-                    <div className="flex-1">
-                      <span className="font-semibold">{choice.label}.</span> {choice.text}
-                    </div>
-                    {showCorrectness && isCorrectChoice && (
+                    {showCorrectness && isCorrectChoice && !isFillInBlank && (
                       <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
                     )}
                     {showCorrectness && isSelected && !isCorrectChoice && (
@@ -276,8 +322,18 @@ export function StudySession({ questions }: StudySessionProps): React.ReactEleme
           {/* Actions */}
           <div className="flex justify-end gap-2">
             {!answered ? (
-              <Button onClick={handleSubmit} disabled={selectedChoices.size === 0}>
-                Submit Answer
+              <Button 
+                onClick={handleSubmit} 
+                disabled={
+                  currentQuestion.choices.length > 1 && 
+                  correctChoices.length > 0 && 
+                  selectedChoices.size === 0
+                }
+              >
+                {(correctChoices.length === 0 || 
+                  (currentQuestion.text.includes('___') && currentQuestion.choices.length === 1))
+                  ? 'Show Answer' 
+                  : 'Submit Answer'}
               </Button>
             ) : (
               <Button onClick={handleNext}>

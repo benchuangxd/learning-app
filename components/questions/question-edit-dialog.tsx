@@ -64,8 +64,8 @@ export function QuestionEditDialog({
   };
 
   const handleAddChoice = (): void => {
-    if (choices.length >= 6) {
-      setErrors(['Maximum 6 choices allowed']);
+    if (choices.length >= 10) {
+      setErrors(['Maximum 10 choices allowed']);
       return;
     }
 
@@ -201,7 +201,7 @@ export function QuestionEditDialog({
                 variant="outline"
                 size="sm"
                 onClick={handleAddChoice}
-                disabled={choices.length >= 6}
+                disabled={choices.length >= 10}
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Add Choice

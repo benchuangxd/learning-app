@@ -11,6 +11,7 @@ import { Trash2, BookOpen, AlertCircle, Edit } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { QuestionEditDialog } from './question-edit-dialog';
+import { ExportImportControls } from './export-import-controls';
 
 const questionsStorage = new LocalStorageAdapter<Question[]>(STORAGE_KEYS.QUESTIONS);
 
@@ -67,6 +68,12 @@ export function QuestionList(): React.ReactElement {
     setEditingQuestion(null);
   };
 
+  const handleImport = (importedQuestions: Question[]): void => {
+    questionsStorage.set(importedQuestions);
+    setQuestions(importedQuestions);
+    window.dispatchEvent(new Event('storage'));
+  };
+
   const toggleExpanded = (id: string): void => {
     setExpandedId(expandedId === id ? null : id);
   };
@@ -84,6 +91,7 @@ export function QuestionList(): React.ReactElement {
 
   return (
     <div className="space-y-4">
+      {/* Header and Controls */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-semibold">Your Questions</h2>
@@ -97,7 +105,10 @@ export function QuestionList(): React.ReactElement {
         </Button>
       </div>
 
-      <div className="space-y-3">
+      {/* Export/Import Controls */}
+      <ExportImportControls questions={questions} onImport={handleImport} />
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {questions.map((question, idx) => {
           const isExpanded = expandedId === question.id;
           const correctChoices = question.choices.filter((c) => c.isCorrect);
