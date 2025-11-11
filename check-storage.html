@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Check LocalStorage - Learning App</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; }
+        .info { 
+            background: #e3f2fd; 
+            padding: 15px; 
+            border-radius: 4px;
+            margin: 15px 0;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success { background: #d4edda; color: #155724; }
+        .warning { background: #fff3cd; color: #856404; }
+        .error { background: #f8d7da; color: #721c24; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        button.danger { background: #dc3545; }
+        button.danger:hover { background: #c82333; }
+        pre {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .count { 
+            font-size: 24px; 
+            font-weight: bold; 
+            color: #007bff; 
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📦 LocalStorage Checker - Learning App</h1>
+        
+        <div class="info">
+            <strong>Storage Key:</strong> learning-app:questions<br>
+            <strong>Storage Type:</strong> Browser LocalStorage<br>
+            <strong>Persistence:</strong> Data stays even after closing browser
+        </div>
+
+        <div id="status"></div>
+
+        <h2>Actions:</h2>
+        <button onclick="checkStorage()">🔍 Check Storage</button>
+        <button onclick="viewQuestions()">📄 View Questions (JSON)</button>
+        <button onclick="downloadBackup()">💾 Download Backup</button>
+        <button class="danger" onclick="clearStorage()">🗑️ Clear Storage</button>
+
+        <div id="output"></div>
+    </div>
+
+    <script>
+        const STORAGE_KEY = 'learning-app:questions';
+
+        function checkStorage() {
+            const data = localStorage.getItem(STORAGE_KEY);
+            const output = document.getElementById('output');
+            const status = document.getElementById('status');
+
+            if (!data) {
+                status.innerHTML = '<div class="status warning">⚠️ No questions found in LocalStorage</div>';
+                output.innerHTML = '<p>LocalStorage is empty. Import questions at <a href="http://localhost:3001/questions" target="_blank">http://localhost:3001/questions</a></p>';
+                return;
+            }
+
+            try {
+                const questions = JSON.parse(data);
+                const count = Array.isArray(questions) ? questions.length : 0;
+                const sizeKB = (new Blob([data]).size / 1024).toFixed(2);
+
+                status.innerHTML = `
+                    <div class="status success">
+                        ✅ Questions found in LocalStorage!<br>
+                        <span class="count">${count}</span> questions<br>
+                        Size: ${sizeKB} KB
+                    </div>
+                `;
+
+                // Show summary
+                let summary = '<h3>Question Summary:</h3><ul>';
+                if (Array.isArray(questions)) {
+                    questions.forEach((q, i) => {
+                        const type = q.text.includes('___') && q.choices.length === 1 
+                            ? 'Fill-in-Blank'
+                            : q.text.toLowerCase().includes('sort') && q.choices.every(c => !c.isCorrect)
+                            ? 'Sorting'
+                            : q.choices.length === 2 && q.choices.some(c => c.text === 'True' || c.text === 'False')
+                            ? 'True/False'
+                            : 'Multiple Choice';
+                        
+                        summary += `<li><strong>Q${i + 1}:</strong> ${q.text.substring(0, 100)}... (${type}, ${q.points} pt)</li>`;
+                    });
+                }
+                summary += '</ul>';
+                output.innerHTML = summary;
+
+            } catch (e) {
+                status.innerHTML = '<div class="status error">❌ Error parsing LocalStorage data</div>';
+                output.innerHTML = `<p>Error: ${e.message}</p>`;
+            }
+        }
+
+        function viewQuestions() {
+            const data = localStorage.getItem(STORAGE_KEY);
+            const output = document.getElementById('output');
+
+            if (!data) {
+                alert('No questions in storage');
+                return;
+            }
+
+            try {
+                const questions = JSON.parse(data);
+                const pretty = JSON.stringify(questions, null, 2);
+                output.innerHTML = `<h3>Raw JSON Data:</h3><pre>${pretty}</pre>`;
+            } catch (e) {
+                output.innerHTML = `<p class="error">Error: ${e.message}</p>`;
+            }
+        }
+
+        function downloadBackup() {
+            const data = localStorage.getItem(STORAGE_KEY);
+            
+            if (!data) {
+                alert('No questions to backup');
+                return;
+            }
+
+            try {
+                const questions = JSON.parse(data);
+                const exportData = {
+                    version: '1.0',
+                    exportDate: new Date().toISOString(),
+                    questionCount: questions.length,
+                    questions: questions
+                };
+
+                const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `learning-app-backup-${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                alert('✅ Backup downloaded!');
+            } catch (e) {
+                alert('❌ Error creating backup: ' + e.message);
+            }
+        }
+
+        function clearStorage() {
+            if (!confirm('⚠️ Are you sure? This will delete ALL questions!\n\nConsider downloading a backup first.')) {
+                return;
+            }
+
+            if (!confirm('⚠️ FINAL WARNING: This action cannot be undone!')) {
+                return;
+            }
+
+            localStorage.removeItem(STORAGE_KEY);
+            document.getElementById('status').innerHTML = '<div class="status warning">🗑️ Storage cleared</div>';
+            document.getElementById('output').innerHTML = '';
+            alert('✅ All questions deleted from LocalStorage');
+        }
+
+        // Auto-check on load
+        window.onload = checkStorage;
+    </script>
+</body>
+</html>
