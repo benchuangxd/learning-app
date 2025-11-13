@@ -19,6 +19,8 @@ export interface QuestionChoice {
   text: string;
   /** Whether this is the correct answer */
   isCorrect: boolean;
+  /** For sorting questions: the correct position (1, 2, 3, 4...) */
+  correctOrder?: number;
 }
 
 /**

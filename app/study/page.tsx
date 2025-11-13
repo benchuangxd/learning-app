@@ -18,6 +18,7 @@ export default function StudyPage(): React.ReactElement {
   const [sessionQuestions, setSessionQuestions] = useState<Question[]>([]);
   const [sessionStarted, setSessionStarted] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
   useEffect(() => {
     const stored = questionsStorage.get();
@@ -25,26 +26,47 @@ export default function StudyPage(): React.ReactElement {
     setLoading(false);
   }, []);
 
-  const stats = getReviewStats(allQuestions);
+  // Get unique categories
+  const categories = Array.from(new Set(allQuestions.map(q => q.category).filter(Boolean) as string[])).sort();
+  
+  // Filter questions by selected category
+  const filteredQuestions = selectedCategory === 'all' 
+    ? allQuestions 
+    : allQuestions.filter(q => q.category === selectedCategory);
+
+  const stats = getReviewStats(filteredQuestions);
 
   const handleStartSession = (mode: 'all' | 'due' | 'random'): void => {
     let questionsToStudy: Question[];
 
     if (mode === 'due') {
-      questionsToStudy = getDueQuestions(allQuestions);
+      questionsToStudy = getDueQuestions(filteredQuestions);
+      // Fisher-Yates shuffle for due questions
+      for (let i = questionsToStudy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [questionsToStudy[i], questionsToStudy[j]] = [questionsToStudy[j]!, questionsToStudy[i]!];
+      }
     } else if (mode === 'random') {
-      // Fisher-Yates shuffle
-      questionsToStudy = [...allQuestions];
+      // Fisher-Yates shuffle for all questions
+      questionsToStudy = [...filteredQuestions];
       for (let i = questionsToStudy.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [questionsToStudy[i], questionsToStudy[j]] = [questionsToStudy[j]!, questionsToStudy[i]!];
       }
     } else {
-      questionsToStudy = [...allQuestions];
+      questionsToStudy = [...filteredQuestions];
     }
 
-    // Randomize answer choices for each question
+    // Randomize answer choices for each question (but NOT sorting questions)
     const questionsWithShuffledChoices = questionsToStudy.map((question) => {
+      // Check if this is a sorting question (has correctOrder field)
+      const isSortingQuestion = question.choices.some((c) => c.correctOrder !== undefined);
+      
+      // Don't shuffle sorting questions - they need to stay in original order
+      if (isSortingQuestion) {
+        return question;
+      }
+      
       const shuffledChoices = [...question.choices];
       
       // Fisher-Yates shuffle for choices
@@ -98,8 +120,45 @@ export default function StudyPage(): React.ReactElement {
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Study Session</h1>
-          <p className="text-muted-foreground">Test your knowledge with practice questions</p>
+          <p className="text-muted-foreground">
+            Test your knowledge with practice questions
+            {selectedCategory !== 'all' && ` • Category: ${selectedCategory}`}
+          </p>
         </div>
+
+        {/* Category Filter */}
+        {categories.length > 0 && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="text-base">Filter by Category</CardTitle>
+              <CardDescription>Choose which questions to study</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  variant={selectedCategory === 'all' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setSelectedCategory('all')}
+                >
+                  All ({allQuestions.length})
+                </Button>
+                {categories.map((category) => {
+                  const count = allQuestions.filter(q => q.category === category).length;
+                  return (
+                    <Button
+                      key={category}
+                      variant={selectedCategory === category ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setSelectedCategory(category)}
+                    >
+                      {category} ({count})
+                    </Button>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {allQuestions.length === 0 ? (
           <Alert>
@@ -123,8 +182,8 @@ export default function StudyPage(): React.ReactElement {
               <CardHeader>
                 <CardTitle>Ready to Study</CardTitle>
                 <CardDescription>
-                  You have {allQuestions.length} question{allQuestions.length !== 1 ? 's' : ''} in
-                  your library
+                  You have {filteredQuestions.length} question{filteredQuestions.length !== 1 ? 's' : ''}
+                  {selectedCategory !== 'all' ? ` in ${selectedCategory}` : ' in your library'}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -176,7 +235,7 @@ export default function StudyPage(): React.ReactElement {
                     <div className="flex-1">
                       <p className="font-semibold text-primary-foreground">Review Due ({stats.due})</p>
                       <p className="text-sm font-normal text-primary-foreground/80">
-                        Study questions that are due for review today
+                        Study due questions in random order
                       </p>
                     </div>
                   </div>
@@ -192,7 +251,7 @@ export default function StudyPage(): React.ReactElement {
                     <div className="flex-1">
                       <p className="font-semibold text-foreground">All Questions</p>
                       <p className="text-sm font-normal text-muted-foreground">
-                        Practice all questions in original order
+                        Practice all {filteredQuestions.length} questions in original order
                       </p>
                     </div>
                   </div>

@@ -19,6 +19,7 @@ export function QuestionList(): React.ReactElement {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
   const loadQuestions = (): void => {
     const stored = questionsStorage.get();
@@ -78,38 +79,77 @@ export function QuestionList(): React.ReactElement {
     setExpandedId(expandedId === id ? null : id);
   };
 
-  if (questions.length === 0) {
-    return (
-      <Alert>
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>
-          No questions yet. Import some questions above to get started!
-        </AlertDescription>
-      </Alert>
-    );
-  }
+  // Get unique categories
+  const categories = Array.from(new Set(questions.map(q => q.category).filter(Boolean) as string[])).sort();
+  
+  // Filter questions by selected category
+  const filteredQuestions = selectedCategory === 'all' 
+    ? questions 
+    : questions.filter(q => q.category === selectedCategory);
 
   return (
     <div className="space-y-4">
       {/* Header and Controls */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold">Your Questions</h2>
-          <p className="text-sm text-muted-foreground">
-            {questions.length} question{questions.length !== 1 ? 's' : ''} in your library
-          </p>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-semibold">Your Questions</h2>
+            <p className="text-sm text-muted-foreground">
+              {questions.length} question{questions.length !== 1 ? 's' : ''} in your library
+              {selectedCategory !== 'all' && ` • Showing: ${selectedCategory}`}
+            </p>
+          </div>
+          {questions.length > 0 && (
+            <Button variant="destructive" size="sm" onClick={handleClearAll}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Clear All
+            </Button>
+          )}
         </div>
-        <Button variant="destructive" size="sm" onClick={handleClearAll}>
-          <Trash2 className="h-4 w-4 mr-2" />
-          Clear All
-        </Button>
+
+        {/* Category Filter */}
+        {categories.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-medium">Filter by category:</span>
+            <Button
+              variant={selectedCategory === 'all' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setSelectedCategory('all')}
+            >
+              All ({questions.length})
+            </Button>
+            {categories.map((category) => {
+              const count = questions.filter(q => q.category === category).length;
+              return (
+                <Button
+                  key={category}
+                  variant={selectedCategory === category ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setSelectedCategory(category)}
+                >
+                  {category} ({count})
+                </Button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Export/Import Controls */}
+      {/* Export/Import Controls - Always visible */}
       <ExportImportControls questions={questions} onImport={handleImport} />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {questions.map((question, idx) => {
+      {/* Empty State */}
+      {questions.length === 0 ? (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            No questions yet. Import some questions above to get started!
+          </AlertDescription>
+        </Alert>
+      ) : (
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {filteredQuestions.map((question, idx) => {
           const isExpanded = expandedId === question.id;
           const correctChoices = question.choices.filter((c) => c.isCorrect);
           const isMultipleAnswer = correctChoices.length > 1;
@@ -123,6 +163,12 @@ export function QuestionList(): React.ReactElement {
                       <CardTitle className="text-base">Question {idx + 1}</CardTitle>
                       <Badge variant="secondary">{question.points} point(s)</Badge>
                       <Badge variant="outline">{question.difficulty}</Badge>
+                      {question.category && (
+                        <Badge variant="default" className="gap-1">
+                          <BookOpen className="h-3 w-3" />
+                          {question.category}
+                        </Badge>
+                      )}
                       {isMultipleAnswer && (
                         <Badge variant="default" className="bg-purple-500">
                           Multiple Answers
@@ -205,7 +251,8 @@ export function QuestionList(): React.ReactElement {
             </Card>
           );
         })}
-      </div>
+        </div>
+      )}
 
       {/* Edit Dialog */}
       {editingQuestion && (

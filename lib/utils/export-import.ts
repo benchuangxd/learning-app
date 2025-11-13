@@ -60,8 +60,9 @@ function validateQuestion(question: unknown, index: number): { valid: boolean; e
   if (!q.text || typeof q.text !== 'string') {
     errors.push(`Question ${index + 1}: Missing or invalid 'text'`);
   }
-  if (!q.explanation || typeof q.explanation !== 'string') {
-    errors.push(`Question ${index + 1}: Missing or invalid 'explanation'`);
+  // Explanation can be blank, but must exist as a string
+  if (typeof q.explanation !== 'string') {
+    errors.push(`Question ${index + 1}: Missing or invalid 'explanation' (must be a string, can be empty)`);
   }
   if (typeof q.points !== 'number' || q.points < 1) {
     errors.push(`Question ${index + 1}: Missing or invalid 'points'`);
@@ -74,25 +75,75 @@ function validateQuestion(question: unknown, index: number): { valid: boolean; e
   } else {
     // Validate choices structure
     const hasValidChoices = q.choices.every((choice: unknown) => {
-      return typeof choice === 'object' && choice !== null && 
-             typeof (choice as Record<string, unknown>).text === 'string';
+      return (
+        typeof choice === 'object' &&
+        choice !== null &&
+        typeof (choice as Record<string, unknown>).text === 'string'
+      );
     });
-    
+
     if (!hasValidChoices) {
       errors.push(`Question ${index + 1}: Invalid choice structure`);
     }
-    
-    // Check for at least one correct answer (unless it's a sorting question)
-    const hasCorrectAnswer = q.choices.some((choice: unknown) => {
-      return typeof choice === 'object' && choice !== null && (choice as Record<string, unknown>).isCorrect === true;
+
+    // Detect question type
+    const hasSortingFields = q.choices.some((choice: unknown) => {
+      return (
+        typeof choice === 'object' &&
+        choice !== null &&
+        typeof (choice as Record<string, unknown>).correctOrder === 'number'
+      );
     });
-    
-    const isSortingQuestion = typeof q.text === 'string' && q.text.toLowerCase().includes('sort');
-    const isFillInBlank = typeof q.text === 'string' && q.text.includes('___') && q.choices.length === 1;
-    
-    // For regular questions (not sorting or fill-in-blank), require correct answer
-    if (!hasCorrectAnswer && !isSortingQuestion && !isFillInBlank) {
-      errors.push(`Question ${index + 1}: No correct answer marked (unless it's a sorting/fill-in-blank question)`);
+
+    const isFillInBlank =
+      typeof q.text === 'string' && q.text.includes('___') && q.choices.length === 1;
+
+    if (hasSortingFields) {
+      // Validate sorting questions
+      const orders = q.choices.map((choice: unknown) => {
+        return (choice as Record<string, unknown>).correctOrder as number;
+      });
+
+      // Check uniqueness
+      const uniqueOrders = new Set(orders);
+      if (uniqueOrders.size !== q.choices.length) {
+        errors.push(`Question ${index + 1}: Sorting question has duplicate order numbers`);
+      }
+
+      // Check sequential (1, 2, 3, 4...)
+      const sortedOrders = [...orders].sort((a, b) => a - b);
+      const expectedOrders = Array.from({ length: q.choices.length }, (_, i) => i + 1);
+      const isSequential = sortedOrders.every((order, i) => order === expectedOrders[i]);
+
+      if (!isSequential) {
+        errors.push(`Question ${index + 1}: Sorting question order numbers must be sequential (1, 2, 3...)`);
+      }
+    } else if (isFillInBlank) {
+      // Fill-in-blank: require exactly 1 correct choice
+      const hasCorrectAnswer = q.choices.some((choice: unknown) => {
+        return (
+          typeof choice === 'object' &&
+          choice !== null &&
+          (choice as Record<string, unknown>).isCorrect === true
+        );
+      });
+
+      if (!hasCorrectAnswer) {
+        errors.push(`Question ${index + 1}: Fill-in-blank question must have correct answer marked`);
+      }
+    } else {
+      // Regular questions: require at least one correct answer
+      const hasCorrectAnswer = q.choices.some((choice: unknown) => {
+        return (
+          typeof choice === 'object' &&
+          choice !== null &&
+          (choice as Record<string, unknown>).isCorrect === true
+        );
+      });
+
+      if (!hasCorrectAnswer) {
+        errors.push(`Question ${index + 1}: No correct answer marked`);
+      }
     }
   }
 

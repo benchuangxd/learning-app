@@ -1,15 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { parseQuestions, type ParseResult } from '@/lib/parsers/question-parser';
 import { LocalStorageAdapter, STORAGE_KEYS } from '@/lib/storage/local-storage';
 import type { Question } from '@/types/question';
-import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Loader2, Folder } from 'lucide-react';
 
 const questionsStorage = new LocalStorageAdapter<Question[]>(STORAGE_KEYS.QUESTIONS);
 
@@ -18,6 +20,17 @@ export function QuestionImport(): React.ReactElement {
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [importSuccess, setImportSuccess] = useState<boolean>(false);
+  const [category, setCategory] = useState<string>('');
+  const [existingCategories, setExistingCategories] = useState<string[]>([]);
+
+  // Load existing categories on mount
+  useEffect(() => {
+    const stored = questionsStorage.get();
+    if (stored) {
+      const categories = [...new Set(stored.map(q => q.category).filter(Boolean) as string[])];
+      setExistingCategories(categories.sort());
+    }
+  }, []);
 
   const handleParse = (): void => {
     if (!input.trim()) {
@@ -34,6 +47,15 @@ export function QuestionImport(): React.ReactElement {
     // Simulate async processing (parsing is actually sync)
     setTimeout(() => {
       const result = parseQuestions(input);
+      
+      // Apply category to all parsed questions
+      if (result.questions.length > 0 && category.trim()) {
+        result.questions = result.questions.map(q => ({
+          ...q,
+          category: category.trim(),
+        }));
+      }
+      
       setParseResult(result);
       setIsProcessing(false);
     }, 500);
@@ -59,7 +81,15 @@ export function QuestionImport(): React.ReactElement {
       if (success) {
         setImportSuccess(true);
         setInput('');
+        setCategory('');
         setParseResult(null);
+        
+        // Refresh categories after import
+        const updatedQuestions = questionsStorage.get();
+        if (updatedQuestions) {
+          const categories = [...new Set(updatedQuestions.map(q => q.category).filter(Boolean) as string[])];
+          setExistingCategories(categories.sort());
+        }
       } else {
         setParseResult({
           ...parseResult,
@@ -76,6 +106,7 @@ export function QuestionImport(): React.ReactElement {
 
   const handleClear = (): void => {
     setInput('');
+    setCategory('');
     setParseResult(null);
     setImportSuccess(false);
   };
@@ -114,6 +145,30 @@ C. Python
 D. Java ✅
 — TypeScript and Java use static typing, while JavaScript and Python use dynamic typing.`}
             </pre>
+          </div>
+
+          {/* Category Input */}
+          <div className="space-y-2">
+            <Label htmlFor="category" className="flex items-center gap-2">
+              <Folder className="h-4 w-4" />
+              Category / Folder (Optional)
+            </Label>
+            <Input
+              id="category"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              placeholder="e.g., Math, History, Programming..."
+              list="categories"
+              disabled={isProcessing}
+            />
+            <datalist id="categories">
+              {existingCategories.map((cat) => (
+                <option key={cat} value={cat} />
+              ))}
+            </datalist>
+            <p className="text-xs text-muted-foreground">
+              Organize your questions into subjects or topics. Leave blank for no category.
+            </p>
           </div>
 
           {/* Textarea Input */}

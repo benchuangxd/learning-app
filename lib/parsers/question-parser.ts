@@ -206,12 +206,14 @@ export function parseQuestions(input: string): ParseResult {
         
         // Convert #1, #2, #3, #4 to A, B, C, D
         const label = String.fromCharCode(64 + parseInt(sortNumber));
+        const correctOrder = parseInt(sortNumber);
         
         currentChoices.push({
           id: crypto.randomUUID(),
           label,
           text,
           isCorrect,
+          correctOrder, // Store the correct position for sorting validation
         });
         continue;
       }
