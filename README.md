@@ -69,7 +69,7 @@ A modern spaced repetition learning application built with Next.js 15, featuring
 
 ```bash
 # Clone the repository
-git clone <your-repo-url>
+git clone https://github.com/benchuangxd/learning-app.git
 cd learning-app
 
 # Install dependencies
