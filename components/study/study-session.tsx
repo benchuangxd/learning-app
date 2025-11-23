@@ -35,10 +35,23 @@ export function StudySession({ questions }: StudySessionProps): React.ReactEleme
   const [showExplanation, setShowExplanation] = useState<boolean>(false);
   const [sortedChoices, setSortedChoices] = useState<QuestionChoice[]>([]);
   const [shortAnswer, setShortAnswer] = useState<string>('');
+  const [elapsedTime, setElapsedTime] = useState<number>(0);
+  const [sessionStartTime] = useState<number>(Date.now());
 
   const currentQuestion = questions[currentIndex];
   const isComplete = currentIndex >= questions.length;
   const progress = ((currentIndex + (answered ? 1 : 0)) / questions.length) * 100;
+
+  // Timer effect
+  useEffect(() => {
+    if (isComplete) return;
+
+    const interval = setInterval(() => {
+      setElapsedTime(Math.floor((Date.now() - sessionStartTime) / 1000));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [sessionStartTime, isComplete]);
 
   // Reset when questions change
   useEffect(() => {
@@ -58,6 +71,12 @@ export function StudySession({ questions }: StudySessionProps): React.ReactEleme
     }
   }, [currentQuestion]);
 
+  const formatTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   if (!currentQuestion || isComplete) {
     // Show summary
     const score = results.filter((r) => r.isCorrect).length;
@@ -76,6 +95,9 @@ export function StudySession({ questions }: StudySessionProps): React.ReactEleme
             <p className="text-4xl font-bold">{percentage}%</p>
             <p className="text-muted-foreground">
               {score} out of {questions.length} correct
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Time: {formatTime(elapsedTime)}
             </p>
           </div>
 
@@ -226,7 +248,10 @@ export function StudySession({ questions }: StudySessionProps): React.ReactEleme
           <span>
             Question {currentIndex + 1} of {questions.length}
           </span>
-          <span>{Math.round(progress)}% Complete</span>
+          <div className="flex items-center gap-4">
+            <span>Time: {formatTime(elapsedTime)}</span>
+            <span>{Math.round(progress)}% Complete</span>
+          </div>
         </div>
         <Progress value={progress} />
       </div>

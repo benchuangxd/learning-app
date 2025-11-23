@@ -57,14 +57,35 @@ export default function StudyPage(): React.ReactElement {
       questionsToStudy = [...filteredQuestions];
     }
 
-    // Randomize answer choices for each question (but NOT sorting questions)
+    // Randomize answer choices for each question (including sorting questions)
     const questionsWithShuffledChoices = questionsToStudy.map((question) => {
       // Check if this is a sorting question (has correctOrder field)
       const isSortingQuestion = question.choices.some((c) => c.correctOrder !== undefined);
       
-      // Don't shuffle sorting questions - they need to stay in original order
-      if (isSortingQuestion) {
-        return question;
+      // Check if this is a True/False question
+      const isTrueFalseQuestion = 
+        question.choices.length === 2 &&
+        question.choices.some((c) => c.text.toLowerCase() === 'true') &&
+        question.choices.some((c) => c.text.toLowerCase() === 'false');
+      
+      // Don't shuffle True/False questions - always keep True first
+      if (isTrueFalseQuestion) {
+        const sortedChoices = [...question.choices].sort((a, b) => {
+          if (a.text.toLowerCase() === 'true') return -1;
+          if (b.text.toLowerCase() === 'true') return 1;
+          return 0;
+        });
+        
+        // Re-assign labels (A, B)
+        const relabeledChoices = sortedChoices.map((choice, index) => ({
+          ...choice,
+          label: String.fromCharCode(65 + index), // A=65, B=66
+        }));
+        
+        return {
+          ...question,
+          choices: relabeledChoices,
+        };
       }
       
       const shuffledChoices = [...question.choices];
@@ -75,11 +96,13 @@ export default function StudyPage(): React.ReactElement {
         [shuffledChoices[i], shuffledChoices[j]] = [shuffledChoices[j]!, shuffledChoices[i]!];
       }
 
-      // Re-assign labels (A, B, C, D) based on new positions
-      const relabeledChoices = shuffledChoices.map((choice, index) => ({
-        ...choice,
-        label: String.fromCharCode(65 + index), // A=65, B=66, C=67, D=68
-      }));
+      // Re-assign labels (A, B, C, D) based on new positions for non-sorting questions
+      const relabeledChoices = isSortingQuestion 
+        ? shuffledChoices // Keep labels as-is for sorting questions
+        : shuffledChoices.map((choice, index) => ({
+            ...choice,
+            label: String.fromCharCode(65 + index), // A=65, B=66, C=67, D=68
+          }));
 
       return {
         ...question,
