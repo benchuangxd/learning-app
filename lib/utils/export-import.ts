@@ -1,4 +1,5 @@
 import type { Question } from '@/types/question';
+import { detectQuestionType } from '@/lib/storage/migration';
 
 export interface ExportData {
   version: string;
@@ -14,7 +15,7 @@ export interface ImportResult {
   warnings: string[];
 }
 
-const EXPORT_VERSION = '1.0';
+const EXPORT_VERSION = '1.1';
 
 /**
  * Export questions to JSON file
@@ -40,15 +41,23 @@ export function exportQuestionsToJSON(questions: Question[]): void {
   URL.revokeObjectURL(url);
 }
 
+/** Valid question type values */
+const VALID_QUESTION_TYPES = ['multiple_choice', 'sorting', 'fill_in_blank'] as const;
+
 /**
  * Validate imported question data
  */
-function validateQuestion(question: unknown, index: number): { valid: boolean; errors: string[] } {
+function validateQuestion(
+  question: unknown,
+  index: number
+): { valid: boolean; errors: string[]; warnings: string[]; needsTypeDetection: boolean } {
   const errors: string[] = [];
+  const warnings: string[] = [];
+  let needsTypeDetection = false;
 
   if (typeof question !== 'object' || question === null) {
     errors.push(`Question ${index + 1}: Invalid question object`);
-    return { valid: false, errors };
+    return { valid: false, errors, warnings, needsTypeDetection };
   }
 
   const q = question as Record<string, unknown>;
@@ -70,6 +79,19 @@ function validateQuestion(question: unknown, index: number): { valid: boolean; e
   if (!q.difficulty || typeof q.difficulty !== 'string') {
     errors.push(`Question ${index + 1}: Missing or invalid 'difficulty'`);
   }
+
+  // Validate questionType field (optional for v1.0 compatibility)
+  if (!q.questionType || typeof q.questionType !== 'string') {
+    // v1.0 format - questionType will be auto-detected
+    warnings.push(`Question ${index + 1}: Missing 'questionType' field (v1.0 format). Type will be auto-detected.`);
+    needsTypeDetection = true;
+  } else if (!VALID_QUESTION_TYPES.includes(q.questionType as typeof VALID_QUESTION_TYPES[number])) {
+    errors.push(
+      `Question ${index + 1}: Invalid 'questionType' value '${q.questionType}'. ` +
+        `Must be one of: ${VALID_QUESTION_TYPES.join(', ')}`
+    );
+  }
+
   if (!Array.isArray(q.choices) || q.choices.length < 1) {
     errors.push(`Question ${index + 1}: Missing or invalid 'choices' array`);
   } else {
@@ -86,40 +108,47 @@ function validateQuestion(question: unknown, index: number): { valid: boolean; e
       errors.push(`Question ${index + 1}: Invalid choice structure`);
     }
 
-    // Detect question type
-    const hasSortingFields = q.choices.some((choice: unknown) => {
-      return (
-        typeof choice === 'object' &&
-        choice !== null &&
-        typeof (choice as Record<string, unknown>).correctOrder === 'number'
-      );
-    });
-
-    const isFillInBlank =
-      typeof q.text === 'string' && q.text.includes('___') && q.choices.length === 1;
-
-    if (hasSortingFields) {
-      // Validate sorting questions
-      const orders = q.choices.map((choice: unknown) => {
-        return (choice as Record<string, unknown>).correctOrder as number;
+    // Type-specific validation based on questionType
+    if (q.questionType === 'sorting') {
+      // Validate sorting questions: require correctOrder on all choices
+      const allHaveOrder = q.choices.every((choice: unknown) => {
+        return (
+          typeof choice === 'object' &&
+          choice !== null &&
+          typeof (choice as Record<string, unknown>).correctOrder === 'number'
+        );
       });
 
-      // Check uniqueness
-      const uniqueOrders = new Set(orders);
-      if (uniqueOrders.size !== q.choices.length) {
-        errors.push(`Question ${index + 1}: Sorting question has duplicate order numbers`);
+      if (!allHaveOrder) {
+        errors.push(`Question ${index + 1}: Sorting questions require correctOrder on all choices`);
+      } else {
+        // Validate order numbers
+        const orders = q.choices.map((choice: unknown) => {
+          return (choice as Record<string, unknown>).correctOrder as number;
+        });
+
+        // Check uniqueness
+        const uniqueOrders = new Set(orders);
+        if (uniqueOrders.size !== q.choices.length) {
+          errors.push(`Question ${index + 1}: Sorting question has duplicate order numbers`);
+        }
+
+        // Check sequential (1, 2, 3, 4...)
+        const sortedOrders = [...orders].sort((a, b) => a - b);
+        const expectedOrders = Array.from({ length: q.choices.length }, (_, i) => i + 1);
+        const isSequential = sortedOrders.every((order, i) => order === expectedOrders[i]);
+
+        if (!isSequential) {
+          errors.push(`Question ${index + 1}: Sorting question order numbers must be sequential (1, 2, 3...)`);
+        }
+      }
+    } else if (q.questionType === 'fill_in_blank') {
+      // Validate fill-in-blank: require ___ in text
+      if (typeof q.text === 'string' && !q.text.includes('___')) {
+        errors.push(`Question ${index + 1}: Fill-in-blank questions must contain '___' in text`);
       }
 
-      // Check sequential (1, 2, 3, 4...)
-      const sortedOrders = [...orders].sort((a, b) => a - b);
-      const expectedOrders = Array.from({ length: q.choices.length }, (_, i) => i + 1);
-      const isSequential = sortedOrders.every((order, i) => order === expectedOrders[i]);
-
-      if (!isSequential) {
-        errors.push(`Question ${index + 1}: Sorting question order numbers must be sequential (1, 2, 3...)`);
-      }
-    } else if (isFillInBlank) {
-      // Fill-in-blank: require exactly 1 correct choice
+      // Require correct answer marked
       const hasCorrectAnswer = q.choices.some((choice: unknown) => {
         return (
           typeof choice === 'object' &&
@@ -131,8 +160,8 @@ function validateQuestion(question: unknown, index: number): { valid: boolean; e
       if (!hasCorrectAnswer) {
         errors.push(`Question ${index + 1}: Fill-in-blank question must have correct answer marked`);
       }
-    } else {
-      // Regular questions: require at least one correct answer
+    } else if (q.questionType === 'multiple_choice') {
+      // Validate multiple choice: require at least one correct answer
       const hasCorrectAnswer = q.choices.some((choice: unknown) => {
         return (
           typeof choice === 'object' &&
@@ -142,12 +171,12 @@ function validateQuestion(question: unknown, index: number): { valid: boolean; e
       });
 
       if (!hasCorrectAnswer) {
-        errors.push(`Question ${index + 1}: No correct answer marked`);
+        errors.push(`Question ${index + 1}: Multiple choice questions must have at least one correct answer`);
       }
     }
   }
 
-  return { valid: errors.length === 0, errors };
+  return { valid: errors.length === 0, errors, warnings, needsTypeDetection };
 }
 
 /**
@@ -190,8 +219,17 @@ export function parseImportedJSON(jsonString: string): ImportResult {
       const questions: Question[] = [];
       importData.questions.forEach((question: unknown, index: number) => {
         const validation = validateQuestion(question, index);
+        warnings.push(...validation.warnings);
         if (validation.valid) {
-          questions.push(question as Question);
+          let q = question as Question;
+          // Auto-detect questionType for v1.0 imports
+          if (validation.needsTypeDetection) {
+            q = {
+              ...q,
+              questionType: detectQuestionType({ text: q.text, choices: q.choices }),
+            };
+          }
+          questions.push(q);
         } else {
           errors.push(...validation.errors);
         }
@@ -208,8 +246,17 @@ export function parseImportedJSON(jsonString: string): ImportResult {
       const questions: Question[] = [];
       data.forEach((question: unknown, index: number) => {
         const validation = validateQuestion(question, index);
+        warnings.push(...validation.warnings);
         if (validation.valid) {
-          questions.push(question as Question);
+          let q = question as Question;
+          // Auto-detect questionType for v1.0 imports
+          if (validation.needsTypeDetection) {
+            q = {
+              ...q,
+              questionType: detectQuestionType({ text: q.text, choices: q.choices }),
+            };
+          }
+          questions.push(q);
         } else {
           errors.push(...validation.errors);
         }

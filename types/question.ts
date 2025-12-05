@@ -8,6 +8,15 @@ export enum QuestionDifficulty {
 }
 
 /**
+ * Question type categories
+ */
+export enum QuestionType {
+  MULTIPLE_CHOICE = 'multiple_choice',
+  SORTING = 'sorting',
+  FILL_IN_BLANK = 'fill_in_blank',
+}
+
+/**
  * A single choice in a multiple-choice question
  */
 export interface QuestionChoice {
@@ -31,6 +40,8 @@ export interface Question {
   id: string;
   /** The question text */
   text: string;
+  /** Question type category */
+  questionType: QuestionType;
   /** Points awarded for correct answer */
   points: number;
   /** Difficulty level */

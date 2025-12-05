@@ -9,6 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { Question, QuestionChoice } from '@/types/question';
+import { QuestionType } from '@/types/question';
 import { CheckCircle2, XCircle, BookOpen, Trophy } from 'lucide-react';
 import Link from 'next/link';
 import { updateReviewMetadata } from '@/lib/services/review-service';
@@ -142,13 +143,9 @@ export function StudySession({ questions }: StudySessionProps): React.ReactEleme
   };
 
   const handleSubmit = (): void => {
-    // Check if this is a sorting question (has correctOrder field)
-    const isSortingQuestion = currentQuestion.choices.some((c) => c.correctOrder !== undefined);
-    
-    // Check if this is a fill-in-the-blank question (has ___ and single correct choice)
-    const isFillInBlank = currentQuestion.text.includes('___') &&
-                          currentQuestion.choices.length === 1 &&
-                          correctChoices.length === 1;
+    // Use explicit questionType instead of runtime detection
+    const isSortingQuestion = currentQuestion.questionType === QuestionType.SORTING;
+    const isFillInBlank = currentQuestion.questionType === QuestionType.FILL_IN_BLANK;
     
     // For non-sorting/fill-in-blank questions, require selection
     if (!isSortingQuestion && !isFillInBlank && selectedChoices.size === 0) return;
@@ -212,13 +209,9 @@ export function StudySession({ questions }: StudySessionProps): React.ReactEleme
   };
 
   const isAnswerCorrect = (): boolean => {
-    // Check if this is a sorting question
-    const isSortingQuestion = currentQuestion.choices.some((c) => c.correctOrder !== undefined);
-    
-    // Check if this is a fill-in-the-blank question
-    const isFillInBlank = currentQuestion.text.includes('___') &&
-                          currentQuestion.choices.length === 1 &&
-                          correctChoices.length === 1;
+    // Use explicit questionType instead of runtime detection
+    const isSortingQuestion = currentQuestion.questionType === QuestionType.SORTING;
+    const isFillInBlank = currentQuestion.questionType === QuestionType.FILL_IN_BLANK;
     
     if (isSortingQuestion) {
       // Check if all items are in correct order
@@ -274,7 +267,7 @@ export function StudySession({ questions }: StudySessionProps): React.ReactEleme
 
         <CardContent className="space-y-6">
           {/* Sorting Question - Draggable List */}
-          {currentQuestion.choices.some((c) => c.correctOrder !== undefined) ? (
+          {currentQuestion.questionType === QuestionType.SORTING ? (
             <div className="space-y-4">
               <div className="text-sm text-muted-foreground">
                 {answered ? '✨ Drag items to reorder (disabled)' : '✨ Drag items to reorder them correctly'}
@@ -322,7 +315,7 @@ export function StudySession({ questions }: StudySessionProps): React.ReactEleme
                 </div>
               )}
             </div>
-          ) : currentQuestion.text.includes('___') && currentQuestion.choices.length === 1 ? (
+          ) : currentQuestion.questionType === QuestionType.FILL_IN_BLANK ? (
             /* Fill-in-the-Blank with Short Answer Input */
             <div className="space-y-4">
               <div className="space-y-2">
@@ -435,7 +428,7 @@ export function StudySession({ questions }: StudySessionProps): React.ReactEleme
           )}
 
           {/* Feedback */}
-          {answered && !currentQuestion.choices.some((c) => c.correctOrder !== undefined) && (
+          {answered && currentQuestion.questionType !== QuestionType.SORTING && (
             <Alert
               className={
                 isAnswerCorrect()
@@ -482,11 +475,9 @@ export function StudySession({ questions }: StudySessionProps): React.ReactEleme
               <Button
                 onClick={handleSubmit}
                 disabled={
-                  currentQuestion.text.includes('___') && currentQuestion.choices.length === 1
+                  currentQuestion.questionType === QuestionType.FILL_IN_BLANK
                     ? !shortAnswer.trim()
-                    : !currentQuestion.choices.some((c) => c.correctOrder !== undefined) &&
-                      currentQuestion.choices.length > 1 &&
-                      correctChoices.length > 0 &&
+                    : currentQuestion.questionType === QuestionType.MULTIPLE_CHOICE &&
                       selectedChoices.size === 0
                 }
               >
