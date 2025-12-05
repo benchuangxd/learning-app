@@ -1,4 +1,5 @@
 import { Question, QuestionChoice, QuestionDifficulty } from '@/types/question';
+import { detectQuestionType } from '@/lib/storage/migration';
 
 /**
  * Error encountered during parsing
@@ -354,6 +355,7 @@ export function parseQuestions(input: string): ParseResult {
           difficulty: currentQuestion.difficulty ?? QuestionDifficulty.MEDIUM,
           choices: currentChoices,
           explanation: explanation.trim(),
+          questionType: detectQuestionType({ text: questionText.trim(), choices: currentChoices }),
           createdAt: new Date(),
           updatedAt: new Date(),
         };

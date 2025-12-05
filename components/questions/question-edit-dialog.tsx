@@ -15,6 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import type { Question, QuestionChoice } from '@/types/question';
+import { QuestionType } from '@/types/question';
 import { X, Plus } from 'lucide-react';
 
 interface QuestionEditDialogProps {
@@ -254,12 +255,21 @@ export function QuestionEditDialog({
       return;
     }
 
+    // Map local questionType to QuestionType enum
+    const mappedQuestionType =
+      questionType === 'sorting'
+        ? QuestionType.SORTING
+        : questionType === 'fillInBlank'
+          ? QuestionType.FILL_IN_BLANK
+          : QuestionType.MULTIPLE_CHOICE;
+
     const updatedQuestion: Question = {
       ...question,
       text: questionText.trim(),
       explanation: explanation.trim(),
       points,
       choices,
+      questionType: mappedQuestionType,
       updatedAt: new Date(),
     };
 

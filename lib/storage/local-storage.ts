@@ -104,3 +104,30 @@ export const STORAGE_KEYS = {
   REVIEW_METADATA: 'learning-app:review-metadata',
   SETTINGS: 'learning-app:settings',
 } as const;
+
+import type { Question } from '@/types/question';
+import { migrateQuestions } from './migration';
+
+/**
+ * Load questions from localStorage and migrate if needed
+ * Auto-detects and adds questionType to legacy questions
+ */
+export function loadAndMigrateQuestions(): Question[] {
+  const storage = new LocalStorageAdapter<Question[]>(STORAGE_KEYS.QUESTIONS);
+  const stored = storage.get();
+
+  if (!stored || stored.length === 0) {
+    return [];
+  }
+
+  // Migrate if needed
+  const { questions, migratedCount } = migrateQuestions(stored);
+
+  // Save back if any migrations occurred
+  if (migratedCount > 0) {
+    storage.set(questions);
+    console.log(`Migrated ${migratedCount} questions to include questionType`);
+  }
+
+  return questions;
+}

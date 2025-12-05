@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { LocalStorageAdapter, STORAGE_KEYS } from '@/lib/storage/local-storage';
 import type { Question } from '@/types/question';
+import { QuestionType } from '@/types/question';
 import { Trash2, BookOpen, AlertCircle, Edit } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -14,6 +15,13 @@ import { QuestionEditDialog } from './question-edit-dialog';
 import { ExportImportControls } from './export-import-controls';
 
 const questionsStorage = new LocalStorageAdapter<Question[]>(STORAGE_KEYS.QUESTIONS);
+
+/** Display labels for question types */
+const questionTypeLabels: Record<QuestionType, string> = {
+  [QuestionType.MULTIPLE_CHOICE]: 'Multiple Choice',
+  [QuestionType.SORTING]: 'Sorting',
+  [QuestionType.FILL_IN_BLANK]: 'Fill in Blank',
+};
 
 export function QuestionList(): React.ReactElement {
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -239,12 +247,18 @@ export function QuestionList(): React.ReactElement {
                   )}
 
                   {/* Metadata */}
-                  <div className="text-xs text-muted-foreground pt-2 border-t">
-                    Correct answer{correctChoices.length > 1 ? 's' : ''}:{' '}
-                    <span className="font-medium">
-                      {correctChoices.map((c) => c.label).join(', ')}
-                    </span>{' '}
-                    • Created: {new Date(question.createdAt).toLocaleDateString()}
+                  <div className="text-xs text-muted-foreground pt-2 border-t space-y-1">
+                    <div>
+                      <span className="font-medium">Type:</span>{' '}
+                      {questionTypeLabels[question.questionType]}
+                    </div>
+                    <div>
+                      Correct answer{correctChoices.length > 1 ? 's' : ''}:{' '}
+                      <span className="font-medium">
+                        {correctChoices.map((c) => c.label).join(', ')}
+                      </span>{' '}
+                      • Created: {new Date(question.createdAt).toLocaleDateString()}
+                    </div>
                   </div>
                 </div>
               </CardContent>
