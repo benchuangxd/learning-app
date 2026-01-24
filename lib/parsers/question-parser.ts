@@ -169,9 +169,10 @@ export function parseQuestions(input: string): ParseResult {
         continue;
       }
 
-      // Match A-J choice or #N choice (for sorting questions): A. Text or #1 Text
+      // Match A-J choice, numeric choice (1. 2. 3.), or #N choice (for sorting questions)
       // But NOT if we're already reading the explanation
       const adChoiceMatch = line.match(/^([A-J])\.\s*(.+?)(\s*✅.*)?$/);
+      const numericChoiceMatch = line.match(/^([1-9])[\.\)]\s*(.+?)(\s*✅.*)?$/);
       const sortChoiceMatch = line.match(/^#(\d+)\s+(.+?)(\s*✅.*)?$/);
       
       if (adChoiceMatch && currentQuestion && !isReadingExplanation) {
@@ -181,6 +182,29 @@ export function parseQuestions(input: string): ParseResult {
         const isCorrect = checkmarkPart.includes('✅');
         
         // If there's text after ✅ in parentheses, include it in the choice text
+        if (checkmarkPart && checkmarkPart.includes('(')) {
+          text += ' ' + checkmarkPart.replace('✅', '').trim();
+        }
+
+        currentChoices.push({
+          id: crypto.randomUUID(),
+          label,
+          text,
+          isCorrect,
+        });
+        continue;
+      }
+
+      // Handle numeric choices (1. 2. 3. 4.) and convert to A, B, C, D
+      if (numericChoiceMatch && currentQuestion && !isReadingExplanation) {
+        const numericLabel = numericChoiceMatch[1] ?? '1';
+        let text = numericChoiceMatch[2]?.trim() ?? '';
+        const checkmarkPart = numericChoiceMatch[3] ?? '';
+        const isCorrect = checkmarkPart.includes('✅');
+
+        // Convert numeric to alphabetic: 1→A, 2→B, 3→C, 4→D, etc.
+        const label = String.fromCharCode(64 + parseInt(numericLabel, 10));
+
         if (checkmarkPart && checkmarkPart.includes('(')) {
           text += ' ' + checkmarkPart.replace('✅', '').trim();
         }

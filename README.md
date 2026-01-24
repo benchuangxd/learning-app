@@ -1,4 +1,6 @@
-# 📚 Learning App
+droid --resume 11de091f-21c1-4145-bc7e-f22124747b21
+
+# 📚 Learning App 
 
 A modern spaced repetition learning application built with Next.js 15, featuring the SM-2 algorithm for optimal knowledge retention.
 

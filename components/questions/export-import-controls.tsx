@@ -6,13 +6,14 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { Question } from '@/types/question';
-import { Download, Upload, AlertCircle, CheckCircle2, Folder } from 'lucide-react';
+import { Download, Upload, AlertCircle, CheckCircle2, Folder, FileText } from 'lucide-react';
 import {
   exportQuestionsToJSON,
   parseImportedJSON,
   regenerateQuestionIDs,
 } from '@/lib/utils/export-import';
 import { LocalStorageAdapter, STORAGE_KEYS } from '@/lib/storage/local-storage';
+import { PDFImportDialog } from './pdf-import-dialog';
 
 const questionsStorage = new LocalStorageAdapter<Question[]>(STORAGE_KEYS.QUESTIONS);
 
@@ -33,6 +34,7 @@ export function ExportImportControls({
   }>({ type: null, message: '' });
   const [category, setCategory] = useState<string>('');
   const [existingCategories, setExistingCategories] = useState<string[]>([]);
+  const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
 
   // Load existing categories
   useEffect(() => {
@@ -189,7 +191,11 @@ export function ExportImportControls({
           </Button>
           <Button variant="outline" size="sm" onClick={handleImportClick}>
             <Upload className="h-4 w-4 mr-2" />
-            Import Questions
+            Import JSON
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setPdfDialogOpen(true)}>
+            <FileText className="h-4 w-4 mr-2" />
+            Import PDF
           </Button>
           <input
             ref={fileInputRef}
@@ -243,6 +249,31 @@ export function ExportImportControls({
           </AlertDescription>
         </Alert>
       )}
+
+      {/* PDF Import Dialog */}
+      <PDFImportDialog
+        open={pdfDialogOpen}
+        onOpenChange={setPdfDialogOpen}
+        onImport={(pdfQuestions) => {
+          // Apply category if specified
+          let questionsToImport = pdfQuestions;
+          if (category.trim()) {
+            questionsToImport = pdfQuestions.map((q) => ({
+              ...q,
+              category: category.trim(),
+            }));
+          }
+
+          // Merge with existing questions
+          onImport([...questions, ...questionsToImport]);
+          setCategory('');
+          setImportStatus({
+            type: 'success',
+            message: `Successfully imported ${questionsToImport.length} question${questionsToImport.length !== 1 ? 's' : ''} from PDF`,
+          });
+          setTimeout(() => setImportStatus({ type: null, message: '' }), 5000);
+        }}
+      />
     </div>
   );
 }
