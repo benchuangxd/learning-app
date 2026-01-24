@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { BookOpen, Library, BarChart3, Home } from 'lucide-react';
@@ -38,11 +39,14 @@ export function Navbar(): React.ReactElement {
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <BookOpen className="h-5 w-5" />
-            </div>
-            <span className="text-xl font-bold">Learning App</span>
+          <Link href="/" className="flex items-center gap-2 transition-transform hover:scale-105 active:scale-95">
+            <Image
+              src="/logo.png"
+              alt="Learning App Logo"
+              width={35}
+              height={35}
+              className="rounded-xl shadow-2xl drop-shadow-[0_0_8px_rgba(59,130,246,0.5)]"
+            />
           </Link>
 
           {/* Navigation Links & Theme Toggle */}
