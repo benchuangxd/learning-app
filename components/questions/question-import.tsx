@@ -12,6 +12,7 @@ import { parseQuestions, type ParseResult } from '@/lib/parsers/question-parser'
 import { LocalStorageAdapter, STORAGE_KEYS } from '@/lib/storage/local-storage';
 import type { Question } from '@/types/question';
 import { AlertCircle, CheckCircle2, Loader2, Folder } from 'lucide-react';
+import { PDFImport } from '@/components/questions/pdf-import';
 
 const questionsStorage = new LocalStorageAdapter<Question[]>(STORAGE_KEYS.QUESTIONS);
 
@@ -27,7 +28,7 @@ export function QuestionImport(): React.ReactElement {
   useEffect(() => {
     const stored = questionsStorage.get();
     if (stored) {
-      const categories = [...new Set(stored.map(q => q.category).filter(Boolean) as string[])];
+      const categories = [...new Set(stored.map((q) => q.category).filter(Boolean) as string[])];
       setExistingCategories(categories.sort());
     }
   }, []);
@@ -47,15 +48,15 @@ export function QuestionImport(): React.ReactElement {
     // Simulate async processing (parsing is actually sync)
     setTimeout(() => {
       const result = parseQuestions(input);
-      
+
       // Apply category to all parsed questions
       if (result.questions.length > 0 && category.trim()) {
-        result.questions = result.questions.map(q => ({
+        result.questions = result.questions.map((q) => ({
           ...q,
           category: category.trim(),
         }));
       }
-      
+
       setParseResult(result);
       setIsProcessing(false);
     }, 500);
@@ -83,11 +84,13 @@ export function QuestionImport(): React.ReactElement {
         setInput('');
         setCategory('');
         setParseResult(null);
-        
+
         // Refresh categories after import
         const updatedQuestions = questionsStorage.get();
         if (updatedQuestions) {
-          const categories = [...new Set(updatedQuestions.map(q => q.category).filter(Boolean) as string[])];
+          const categories = [
+            ...new Set(updatedQuestions.map((q) => q.category).filter(Boolean) as string[]),
+          ];
           setExistingCategories(categories.sort());
         }
       } else {
@@ -118,11 +121,16 @@ export function QuestionImport(): React.ReactElement {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Import Questions</CardTitle>
-          <CardDescription>
-            Paste your questions in the markdown format below. Each question should include choices
-            (A-D or more) with one or more marked as correct using ✅.
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Import Questions</CardTitle>
+              <CardDescription>
+                Paste your questions in the markdown format below. Each question should include
+                choices (A-D or more) with one or more marked as correct using ✅.
+              </CardDescription>
+            </div>
+            <PDFImport />
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Example Format */}
