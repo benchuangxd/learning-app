@@ -89,7 +89,7 @@ export async function extractTextFromPdf(
     onProgress?: (stage: string, current: number, total: number) => void;
   } = {}
 ): Promise<string> {
-  const { maxPages = 20, onProgress } = options;
+  const { maxPages = 40, onProgress } = options;
 
   const { hashFile, getCachedText, setCachedText } = await import('./cache-manager');
 

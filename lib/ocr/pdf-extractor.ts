@@ -31,7 +31,7 @@ export async function extractPagesFromPdf(
   file: File,
   options: ExtractPagesOptions = {}
 ): Promise<PdfPage[]> {
-  const { maxPages = 20, onProgress } = options;
+  const { maxPages = 40, onProgress } = options;
 
   // Read file as ArrayBuffer
   const arrayBuffer = await file.arrayBuffer();

@@ -71,7 +71,7 @@ export function PdfUpload(): React.ReactElement {
       const { extractTextFromPdf } = await import('@/lib/ocr/tesseract-service');
 
       const extractedText = await extractTextFromPdf(uploadedFile, {
-        maxPages: 20,
+        maxPages: 40,
         onProgress: (stage, current, total) => {
           setProgress(`${stage}: ${current} of ${total}`);
         },
@@ -175,7 +175,7 @@ export function PdfUpload(): React.ReactElement {
             <div className="flex flex-col items-center gap-2 text-muted-foreground">
               <Upload className="h-8 w-8 mb-2" />
               <p className="text-sm font-medium">Drag & drop PDF here or click to browse</p>
-              <p className="text-xs">Supports .pdf files only (max 20 pages)</p>
+              <p className="text-xs">Supports .pdf files only (max 40 pages)</p>
             </div>
           </div>
         ) : (
