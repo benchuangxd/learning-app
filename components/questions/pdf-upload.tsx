@@ -7,7 +7,11 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Upload, FileText, X, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { parseQuestions, type ParseResult } from '@/lib/parsers/question-parser';
+import {
+  parseOcrText,
+  toggleCorrectAnswer,
+  hasCorrectAnswer,
+} from '@/lib/parsers/ocr-question-parser';
 import type { Question } from '@/types/question';
 import { LocalStorageAdapter, STORAGE_KEYS } from '@/lib/storage/local-storage';
 
@@ -19,7 +23,7 @@ export function PdfUpload(): React.ReactElement {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<string>('');
-  const [parseResult, setParseResult] = useState<ParseResult | null>(null);
+  const [editableQuestions, setEditableQuestions] = useState<Question[]>([]);
   const [importSuccess, setImportSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -64,7 +68,7 @@ export function PdfUpload(): React.ReactElement {
     setFile(uploadedFile);
     setIsProcessing(true);
     setProgress('Initializing...');
-    setParseResult(null);
+    setEditableQuestions([]);
     setImportSuccess(false);
 
     try {
@@ -78,11 +82,13 @@ export function PdfUpload(): React.ReactElement {
       });
 
       setProgress('Parsing questions...');
-      const result = parseQuestions(extractedText);
-      setParseResult(result);
+      const result = parseOcrText(extractedText);
+      setEditableQuestions(result.questions);
 
       if (result.questions.length === 0) {
-        setError('No questions found. Verify PDF format matches expected structure.');
+        setError(
+          'No questions detected. The PDF may not contain recognizable question patterns (e.g., "1.", "A.", etc.).'
+        );
       }
 
       setIsProcessing(false);
@@ -102,22 +108,48 @@ export function PdfUpload(): React.ReactElement {
 
       setIsProcessing(false);
       setProgress('');
-      setParseResult(null);
+      setEditableQuestions([]);
     }
   };
 
+  const handleToggleCorrect = (questionIndex: number, choiceId: string): void => {
+    setEditableQuestions((prev) => {
+      const updated = [...prev];
+      const question = updated[questionIndex];
+      if (question) {
+        updated[questionIndex] = toggleCorrectAnswer(question, choiceId);
+      }
+      return updated;
+    });
+  };
+
   const handleImport = (): void => {
-    if (!parseResult || parseResult.questions.length === 0) {
+    if (editableQuestions.length === 0) {
+      return;
+    }
+
+    const questionsWithAnswers = editableQuestions.filter(hasCorrectAnswer);
+
+    if (questionsWithAnswers.length === 0) {
+      setError('Please mark at least one correct answer for each question before importing.');
+      return;
+    }
+
+    if (questionsWithAnswers.length < editableQuestions.length) {
+      const missing = editableQuestions.length - questionsWithAnswers.length;
+      setError(
+        `${missing} question(s) have no correct answer marked. Please mark correct answers or remove them.`
+      );
       return;
     }
 
     const existingQuestions = questionsStorage.get() ?? [];
-    const allQuestions = [...existingQuestions, ...parseResult.questions];
+    const allQuestions = [...existingQuestions, ...questionsWithAnswers];
     const success = questionsStorage.set(allQuestions);
 
     if (success) {
       setImportSuccess(true);
-      setParseResult(null);
+      setEditableQuestions([]);
       setFile(null);
 
       setTimeout(() => {
@@ -128,12 +160,16 @@ export function PdfUpload(): React.ReactElement {
     }
   };
 
+  const handleRemoveQuestion = (index: number): void => {
+    setEditableQuestions((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const removeFile = (): void => {
     setFile(null);
     setError(null);
     setIsProcessing(false);
     setProgress('');
-    setParseResult(null);
+    setEditableQuestions([]);
     setImportSuccess(false);
   };
 
@@ -145,11 +181,15 @@ export function PdfUpload(): React.ReactElement {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
+  const questionsWithoutAnswers = editableQuestions.filter((q) => !hasCorrectAnswer(q)).length;
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Upload PDF</CardTitle>
-        <CardDescription>Upload a PDF file to extract questions automatically.</CardDescription>
+        <CardDescription>
+          Upload a scanned PDF to extract questions. Click choices to mark correct answers.
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {!file ? (
@@ -175,7 +215,7 @@ export function PdfUpload(): React.ReactElement {
             <div className="flex flex-col items-center gap-2 text-muted-foreground">
               <Upload className="h-8 w-8 mb-2" />
               <p className="text-sm font-medium">Drag & drop PDF here or click to browse</p>
-              <p className="text-xs">Supports .pdf files only (max 40 pages)</p>
+              <p className="text-xs">Supports scanned exam PDFs (max 40 pages)</p>
             </div>
           </div>
         ) : (
@@ -213,48 +253,75 @@ export function PdfUpload(): React.ReactElement {
               </div>
             </div>
 
-            {parseResult && parseResult.questions.length > 0 && (
+            {editableQuestions.length > 0 && (
               <div className="space-y-4">
                 <Alert>
                   <CheckCircle2 className="h-4 w-4" />
                   <AlertTitle>Questions Extracted</AlertTitle>
                   <AlertDescription>
-                    Found {parseResult.questions.length} question
-                    {parseResult.questions.length !== 1 ? 's' : ''} in PDF.
+                    Found {editableQuestions.length} question
+                    {editableQuestions.length !== 1 ? 's' : ''}. Click on choices to mark correct
+                    answers.
+                    {questionsWithoutAnswers > 0 && (
+                      <span className="text-amber-600 dark:text-amber-400 ml-1">
+                        ({questionsWithoutAnswers} need answers)
+                      </span>
+                    )}
                   </AlertDescription>
                 </Alert>
 
                 <div className="max-h-96 overflow-y-auto space-y-4 border rounded-lg p-4">
-                  {parseResult.questions.map((question, idx) => (
-                    <div key={idx} className="space-y-2 pb-4 border-b last:border-0">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline">
-                          {question.points} point{question.points !== 1 ? 's' : ''}
-                        </Badge>
-                        <Badge variant="secondary">{question.difficulty}</Badge>
+                  {editableQuestions.map((question, qIdx) => (
+                    <div key={question.id} className="space-y-2 pb-4 border-b last:border-0">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline">Q{qIdx + 1}</Badge>
+                          {!hasCorrectAnswer(question) && (
+                            <Badge variant="destructive" className="text-xs">
+                              No answer
+                            </Badge>
+                          )}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                          onClick={() => handleRemoveQuestion(qIdx)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
                       </div>
-                      <p className="font-medium">{question.text}</p>
-                      <div className="space-y-1 pl-4">
-                        {question.choices.map((choice, cidx) => (
-                          <div key={cidx} className="flex items-center gap-2 text-sm">
-                            <span
-                              className={
-                                choice.isCorrect ? 'text-green-600 dark:text-green-400' : ''
-                              }
-                            >
-                              {choice.label}. {choice.text}
-                              {choice.isCorrect && ' ✅'}
-                            </span>
-                          </div>
+                      <p className="font-medium text-sm">{question.text}</p>
+                      <div className="space-y-1 pl-2">
+                        {question.choices.map((choice) => (
+                          <button
+                            key={choice.id}
+                            type="button"
+                            onClick={() => handleToggleCorrect(qIdx, choice.id)}
+                            className={cn(
+                              'w-full text-left px-2 py-1 rounded text-sm transition-colors',
+                              'hover:bg-muted/50 cursor-pointer',
+                              choice.isCorrect
+                                ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 font-medium'
+                                : 'text-muted-foreground'
+                            )}
+                          >
+                            {choice.label}. {choice.text}
+                            {choice.isCorrect && ' ✓'}
+                          </button>
                         ))}
                       </div>
                     </div>
                   ))}
                 </div>
 
-                <Button onClick={handleImport} className="w-full">
-                  Import {parseResult.questions.length} Question
-                  {parseResult.questions.length !== 1 ? 's' : ''}
+                <Button
+                  onClick={handleImport}
+                  className="w-full"
+                  disabled={questionsWithoutAnswers > 0}
+                >
+                  Import {editableQuestions.length} Question
+                  {editableQuestions.length !== 1 ? 's' : ''}
                 </Button>
               </div>
             )}
