@@ -91,10 +91,20 @@ export async function extractTextFromPdf(
 ): Promise<string> {
   const { maxPages = 20, onProgress } = options;
 
-  // Import PDF extractor
+  const { hashFile, getCachedText, setCachedText } = await import('./cache-manager');
+
+  const fileHash = await hashFile(file);
+  const cachedText = getCachedText(fileHash);
+
+  if (cachedText) {
+    if (onProgress) {
+      onProgress('Cache hit', 1, 1);
+    }
+    return cachedText;
+  }
+
   const { extractPagesFromPdf } = await import('./pdf-extractor');
 
-  // Extract pages from PDF
   if (onProgress) {
     onProgress('Extracting pages', 0, 1);
   }
@@ -108,7 +118,6 @@ export async function extractTextFromPdf(
     },
   });
 
-  // Run OCR on pages
   if (onProgress) {
     onProgress('Running OCR', 0, pages.length);
   }
@@ -120,6 +129,8 @@ export async function extractTextFromPdf(
       }
     },
   });
+
+  setCachedText(fileHash, result.text);
 
   return result.text;
 }
