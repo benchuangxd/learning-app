@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { QuestionImport } from '@/components/questions/question-import';
+import { PdfUpload } from '@/components/questions/pdf-upload';
 import { QuestionList } from '@/components/questions/question-list';
 
 export default function QuestionsPage(): React.ReactElement {
@@ -19,6 +20,7 @@ export default function QuestionsPage(): React.ReactElement {
 
         <div className="space-y-8">
           {/* Import Section */}
+          <PdfUpload />
           <QuestionImport />
 
           {/* Questions List Section */}
