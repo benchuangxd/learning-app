@@ -103,6 +103,7 @@ export const STORAGE_KEYS = {
   SESSIONS: 'learning-app:sessions',
   REVIEW_METADATA: 'learning-app:review-metadata',
   SETTINGS: 'learning-app:settings',
+  OCR_CACHE: 'learning-app:ocr-cache',
 } as const;
 
 import type { Question } from '@/types/question';
